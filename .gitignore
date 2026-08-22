@@ -1,0 +1,30 @@
+# Python
+backend/.venv/
+backend/__pycache__/
+*.py[cod]
+*$py.class
+
+# .NET
+client-csharp/bin/
+client-csharp/obj/
+
+# Unity generated folders
+unity-client/MultiAgent-simulation/Library/
+unity-client/MultiAgent-simulation/Temp/
+unity-client/MultiAgent-simulation/Logs/
+unity-client/MultiAgent-simulation/UserSettings/
+unity-client/MultiAgent-simulation/obj/
+unity-client/MultiAgent-simulation/Build/
+unity-client/MultiAgent-simulation/Builds/
+
+# IDE and local settings
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+*.userprefs
+
+# OS files
+.DS_Store
+Thumbs.db
