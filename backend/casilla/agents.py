@@ -46,10 +46,8 @@ class VoterAgent(Agent):
 
     def __init__(self, model, number: int) -> None:
         super().__init__(model)
-        # A friendly 1-based sequence number for logging/display. Mesa's own
-        # unique_id is shared across every agent in the model (stations and
-        # the coordinator are created first), so the first voter would
-        # otherwise show up as e.g. "Votante 6" instead of "Votante 1".
+        # 1-based display number; Mesa's own unique_id is shared across all
+        # agents, so the first voter would otherwise log as "Votante 6".
         self.number = number
         self.status: str = "arrived"
         self.timestamps: dict[str, float] = {}

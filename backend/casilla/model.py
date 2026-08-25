@@ -20,7 +20,7 @@ from .agents import Coordinador, Message, Station, VoterAgent
 
 logger = logging.getLogger(__name__)
 
-# Simulated minutes, matching CONTEXT.md's station timings.
+# Values are in simulated minutes.
 STATION_SERVICE_TIMES: dict[str, tuple[float, float]] = {
     "secretario": (1.5, 2.5),
     "mesa": (0.5, 1.5),
@@ -48,11 +48,9 @@ class CasillaModel(Model):
     ) -> None:
         super().__init__(rng=rng)
 
-        # Model.__init__ always starts a hidden recurring event that fires
-        # every 1.0 time unit to support the legacy step() API. Left
-        # running, it logs "Step N at time T" noise and adds unrelated
-        # events to the queue for a model that never calls step(). No public
-        # API exists in Mesa 3.5.1 to opt out of it at construction time.
+        # Mesa's Model starts a hidden recurring step() event by default;
+        # stop it since this model never calls step() and Mesa 3.5.1 has no
+        # public API to opt out at construction time.
         self._default_schedule.stop()
 
         self._scheduled_callbacks: list[Any] = []
@@ -89,7 +87,7 @@ class CasillaModel(Model):
             self, stations=[self.secretario, self.mesa, self.casilla, self.urna]
         )
 
-        self.secretario.on_complete = self._on_secretario_done
+        self.secretario.on_complete = self._on_secretario_done  # branches on INE rejection
         self.mesa.on_complete = lambda voter: self.casilla.request(voter)
         self.casilla.on_complete = lambda voter: self.urna.request(voter)
         self.urna.on_complete = self._on_exit
@@ -105,13 +103,9 @@ class CasillaModel(Model):
         after: float | None = None,
         priority: Priority = Priority.DEFAULT,
     ) -> Event:
-        """``schedule_event``, but keeps a strong reference to ``fn`` alive.
-
-        Mesa's ``Event`` holds callbacks via weak reference; a
-        ``functools.partial`` passed inline with no other strong reference
-        is garbage-collected before it fires. Every caller with a
-        parameterized callback should go through this instead of calling
-        ``schedule_event`` directly.
+        """``schedule_event``, but keeps a strong reference to ``fn`` alive
+        since Mesa holds callbacks by weak reference and would otherwise GC
+        an inline ``functools.partial`` before it fires.
         """
         self._scheduled_callbacks.append(fn)
         return self.schedule_event(fn, at=at, after=after, priority=priority)
