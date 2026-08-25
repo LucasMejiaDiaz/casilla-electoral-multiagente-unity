@@ -1,37 +1,79 @@
 # Casilla INE Multi-Agent Simulation
 
-> **Nota:** este README es provisional — documenta el motor de eventos y
-> reloj simulado que funciona hoy, primer incremento de la simulación de una
-> casilla de votación INE. Estaciones (secretario, mesa, casilla, urna),
-> roles, el API Flask y la integración con Unity todavía no están
-> implementados.
+> **Nota:** este README es provisional — documenta el motor de eventos, las
+> estaciones (secretario, mesa, casilla, urna), el agente votante, el
+> coordinador y el evento externo que funcionan hoy. Rechazo de INE
+> inválida, capacidad configurable por estación, grid espacial, el API
+> Flask y la integración con Unity todavía no están implementados.
 
-A Mesa-based discrete-event simulation core: voter-arrival events are scheduled on Mesa's built-in priority-queue scheduler and the simulated clock jumps directly from event to event (never fixed ticks). A C# console client and a Unity visualization exist but are temporarily inactive — they depended on a Flask API that will return in a later increment.
+A Mesa-based discrete-event simulation of a casilla de votación INE: voter
+agents arrive as a Poisson process and move through a chain of
+capacity-limited stations — secretario → mesa → casilla → urna — each with
+its own FIFO wait queue and randomized service time. All hand-offs (a
+station giving a voter their turn or telling them to wait, the coordinator
+pausing/resuming a station) are explicit `Message` objects, not bare method
+calls. A random external event (corte de luz, temblor, aguacero) fires once
+per run and is broadcast by a `Coordinador` agent to pause every station for
+a while. The simulated clock is Mesa's built-in priority-queue event
+scheduler — it jumps directly from event to event, never fixed ticks. A C#
+console client and a Unity visualization exist but are temporarily inactive
+— they depended on a Flask API that will return in a later increment.
 
-## Architecture
+## How the Simulation Works
 
 ```text
-Mesa event-driven engine (backend/casilla/) -> console log output
+Voter arrival (Poisson, --arrival-rate)
+        |
+        v
+  secretario --TURN/WAIT--> mesa --TURN/WAIT--> casilla --TURN/WAIT--> urna --> exit
+   (1.5-2.5 min)          (0.5-1.5 min)        (2.0-4.0 min)        (0.2-0.6 min)
+   each: capacity 1, FIFO queue, random (uniform) service time
+
+External event (random time, random kind: corte_de_luz | temblor | aguacero)
+        |
+        v
+  Coordinador --PAUSE broadcast--> secretario, mesa, casilla, urna
+        | (after a random duration)
+        v
+  Coordinador --RESUME broadcast--> secretario, mesa, casilla, urna
 ```
 
-Each scheduled event has a simulated time and a callback. Running the model schedules a batch of voter arrivals with randomized inter-arrival times and processes them strictly in chronological order — the clock advances to each event's exact time, not by fixed steps.
+- Every station is a `Station(mesa.Agent)` instance with its own capacity
+  (fixed at 1), FIFO `deque` queue, and service-time range in simulated
+  minutes. A busy station queues incoming voters; freeing up pulls the next
+  one from the queue automatically.
+- Voters are `VoterAgent(mesa.Agent)` instances that react to `Message`s
+  (`TURN`, `WAIT`) sent by whichever station is currently handling them.
+- The external event is scheduled by the model itself at a random point
+  within the run (not injected from outside), with a random kind and a
+  random 3-10 minute duration. The `Coordinador` is the single place that
+  broadcasts to all four stations — this is the actual inter-agent
+  communication the event triggers, not the event by itself.
+- `model.event_log` records `ARRIVAL`, `EXIT`, and `EXTERNAL_EVENT` entries
+  with simulated timestamps; every message send/receive and station
+  start/stop is also logged via `logging` (not `print`).
+- The clock is driven event-by-event to completion with
+  `model.run_to_completion()` — never a `step()` loop.
 
 ## Project Structure
 
 ```text
 backend/
   casilla/
-    model.py                 CasillaModel: event queue + simulated clock core
+    __init__.py               Exports CasillaModel
+    model.py                  CasillaModel: builds stations/coordinador, schedules arrivals + external event
+    agents.py                 VoterAgent, Station, Coordinador, Message
   tests/
-    test_casilla_model.py    pytest suite for the event engine
-  main.py                    Console entry point (schedules arrivals, runs the clock)
-  requirements.txt           Python dependencies
+    conftest.py                sys.path shim so `import casilla` resolves
+    test_casilla_model.py      pytest suite (currently out of date, see "Run the Tests")
+  main.py                      Console entry point (schedules arrivals, runs the clock to completion)
+  requirements.txt             Python dependencies
 client-csharp/
-  Program.cs                 C# HTTP client (temporarily inactive, see below)
+  Program.cs                   C# HTTP client (temporarily inactive, see below)
 unity-client/
-  MultiAgent-simulation/     Unity project
+  MultiAgent-simulation/       Unity project
     Assets/Scripts/
-      FlaskAgentClient.cs    Unity API integration (temporarily inactive, see below)
+      FlaskAgentClient.cs      Unity API integration (temporarily inactive, see below)
 .gitignore
 ```
 
@@ -74,11 +116,17 @@ cd backend
 .\.venv\Scripts\python.exe -m pytest -v
 ```
 
-Verifies: events fire in chronological order regardless of scheduling order, the clock advances to each event's exact (non-integer) time rather than ticking, same-timestamp events respect priority as a tiebreak, `run_until()` correctly stops at its boundary and resumes correctly on a later call, seeded runs are reproducible, and arrivals are genuinely logged via `logging` (not just recorded in memory).
+> **Nota:** `test_casilla_model.py` todavía prueba la API del incremento
+> anterior (`model.schedule_voter_arrival`, `model.arrival_log`). Esa API se
+> reemplazó por `model.schedule_callback` / `model.event_log` al añadir las
+> estaciones, el coordinador y el evento externo, así que la suite falla
+> contra el código actual. Está pendiente actualizarla para cubrir la
+> cadena de estaciones, las colas FIFO, el `Coordinador` y el evento
+> externo.
 
 ## Run the C# Client (temporarily inactive)
 
-> The Flask API this client depends on was removed in this increment (see "Run the Simulation Demo" above). These instructions are preserved for when the Flask API returns in a future increment; running them now will fail to connect.
+> The Flask API this client depends on was removed in an earlier increment (see "Run the Simulation Demo" above). These instructions are preserved for when the Flask API returns in a future increment; running them now will fail to connect.
 
 ```powershell
 cd client-csharp
@@ -89,7 +137,7 @@ The client sends an HTTP request to Flask and prints the formatted JSON response
 
 ## Run the Unity Integration (temporarily inactive)
 
-> The Flask API this integration depends on was removed in this increment. These instructions are preserved for when the Flask API returns in a future increment; running them now will show a connection error in the Game window.
+> The Flask API this integration depends on was removed in an earlier increment. These instructions are preserved for when the Flask API returns in a future increment; running them now will show a connection error in the Game window.
 
 1. Open `unity-client/MultiAgent-simulation` in Unity.
 2. Open `Assets/Scenes/SampleScene`.
@@ -99,19 +147,39 @@ The client sends an HTTP request to Flask and prints the formatted JSON response
 ## Example Console Output
 
 ```text
-[10:17:26] Votante 1 llega en t=1.17
-[10:17:26] Votante 2 llega en t=1.66
-[10:17:26] Votante 3 llega en t=4.82
+[16:22:29] Votante 1 llega en t=0.54
+[16:22:29] secretario envia TURN a votante 1 en t=0.54
+[16:22:29] Votante 1 recibe TURN de secretario en t=0.54
+[16:22:29] EVENTO EXTERNO: temblor en t=1.79 (dura 4.82 min)
+[16:22:29] Coordinador recibe EXTERNAL_EVENT (temblor, dura 4.82 min) en t=1.79
+[16:22:29] Coordinador envia PAUSE a secretario en t=1.79
+[16:22:29] secretario recibe PAUSE de Coordinador en t=1.79
 ...
-[10:17:26] Simulación terminada en t=38.33 (20 votantes procesados)
+[16:22:29] Votante 2 llega en t=2.12
+[16:22:29] secretario envia WAIT a votante 2 en t=2.12
+[16:22:29] Votante 2 recibe WAIT de secretario en t=2.12
+...
+[16:22:29] Coordinador envia RESUME a secretario en t=6.61
+[16:22:29] secretario recibe RESUME de Coordinador en t=6.61
+[16:22:29] secretario envia TURN a votante 2 en t=6.61
+...
+[16:22:29] urna termina con votante 1 en t=11.80
+[16:22:29] Votante 1 EXITS en t=11.80
+...
+[16:22:29] Simulación terminada en t=28.72 (6 votantes procesados)
 ```
 
 ## Verification
 
 The following has been tested against a clean checkout for this increment (fresh venv, `pip install -r requirements.txt`):
 
-- `python main.py` prints voter arrivals in strict chronological order with non-integer timestamps (proving event-driven, not fixed-tick, time advancement).
-- `pytest -v` passes all 7 cases in `backend/tests/test_casilla_model.py`.
+- `python main.py` runs to completion, chains every voter through
+  secretario → mesa → casilla → urna → exit in strict chronological order,
+  and shows a `corte_de_luz`/`temblor`/`aguacero` event pausing all four
+  stations and resuming them later (verified with `--seed 7` and `--seed 3`
+  runs).
+- `pytest -v` is **not** currently green — see the note under "Run the
+  Tests" above.
 
 The C# client and Unity integration bullets below reflect verification from a prior increment against the now-removed Flask demo, not re-verified this round:
 
@@ -120,4 +188,4 @@ The C# client and Unity integration bullets below reflect verification from a pr
 
 ## AI Assistance Disclosure
 
-AI tools were used to assist with code creation, debugging, documentation, and understanding the technology stack. The implementation was reviewed and tested by the student, who understands the main concepts involved: Mesa's event-driven scheduling, discrete-event simulation, HTTP communication with C#, and Unity integration using `UnityWebRequest`.
+AI tools were used to assist with code creation, debugging, documentation, and understanding the technology stack. The implementation was reviewed and tested by the student, who understands the main concepts involved: Mesa's event-driven scheduling, discrete-event simulation, inter-agent messaging, HTTP communication with C#, and Unity integration using `UnityWebRequest`.
