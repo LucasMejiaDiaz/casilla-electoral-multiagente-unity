@@ -39,6 +39,10 @@ class CasillaModel(Model):
         num_voters: int = 200,
         arrival_rate: float = 1 / 3,
         *,
+        secretario_capacity: int = 1,
+        mesa_capacity: int = 1,
+        casilla_capacity: int = 1,
+        urna_capacity: int = 1,
         rng: int | None = None,
     ) -> None:
         super().__init__(rng=rng)
@@ -56,16 +60,28 @@ class CasillaModel(Model):
         self.last_scheduled_arrival_time: float | None = None
 
         self.secretario = Station(
-            self, "secretario", service_time_range=STATION_SERVICE_TIMES["secretario"]
+            self,
+            "secretario",
+            capacity=secretario_capacity,
+            service_time_range=STATION_SERVICE_TIMES["secretario"],
         )
         self.mesa = Station(
-            self, "mesa", service_time_range=STATION_SERVICE_TIMES["mesa"]
+            self,
+            "mesa",
+            capacity=mesa_capacity,
+            service_time_range=STATION_SERVICE_TIMES["mesa"],
         )
         self.casilla = Station(
-            self, "casilla", service_time_range=STATION_SERVICE_TIMES["casilla"]
+            self,
+            "casilla",
+            capacity=casilla_capacity,
+            service_time_range=STATION_SERVICE_TIMES["casilla"],
         )
         self.urna = Station(
-            self, "urna", service_time_range=STATION_SERVICE_TIMES["urna"]
+            self,
+            "urna",
+            capacity=urna_capacity,
+            service_time_range=STATION_SERVICE_TIMES["urna"],
         )
         self.coordinador = Coordinador(
             self, stations=[self.secretario, self.mesa, self.casilla, self.urna]

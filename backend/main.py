@@ -21,6 +21,10 @@ def main() -> None:
     parser.add_argument("--num-voters", type=int, default=20)
     parser.add_argument("--arrival-rate", type=float, default=1 / 3)
     parser.add_argument("--seed", type=int, default=None)
+    parser.add_argument("--secretario-capacity", type=int, default=1)
+    parser.add_argument("--mesa-capacity", type=int, default=1)
+    parser.add_argument("--casilla-capacity", type=int, default=1)
+    parser.add_argument("--urna-capacity", type=int, default=1)
     args = parser.parse_args()
 
     logging.basicConfig(
@@ -30,6 +34,10 @@ def main() -> None:
     model = CasillaModel(
         num_voters=args.num_voters,
         arrival_rate=args.arrival_rate,
+        secretario_capacity=args.secretario_capacity,
+        mesa_capacity=args.mesa_capacity,
+        casilla_capacity=args.casilla_capacity,
+        urna_capacity=args.urna_capacity,
         rng=args.seed,
     )
 

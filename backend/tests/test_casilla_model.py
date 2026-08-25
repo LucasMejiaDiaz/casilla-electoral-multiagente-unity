@@ -122,6 +122,22 @@ def test_event_log_records_each_station_completion_in_order():
     ]
 
 
+def test_station_capacity_is_configurable_per_station():
+    model = CasillaModel(
+        num_voters=0,
+        rng=1,
+        secretario_capacity=2,
+        mesa_capacity=3,
+        casilla_capacity=1,
+        urna_capacity=1,
+    )
+
+    assert model.secretario.capacity == 2
+    assert model.mesa.capacity == 3
+    assert model.casilla.capacity == 1
+    assert model.urna.capacity == 1
+
+
 # --- Station: capacity-limited FIFO resource -------------------------------
 
 

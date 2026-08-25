@@ -27,7 +27,7 @@ Voter arrival (Poisson, --arrival-rate)
         v
   secretario --TURN/WAIT--> mesa --TURN/WAIT--> casilla --TURN/WAIT--> urna --> exit
    (1.5-2.5 min)          (0.5-1.5 min)        (2.0-4.0 min)        (0.2-0.6 min)
-   each: capacity 1, FIFO queue, random (uniform) service time
+   each: configurable capacity (default 1), FIFO queue, random (uniform) service time
 
 External event (random time, random kind: corte_de_luz | temblor | aguacero)
         |
@@ -39,9 +39,9 @@ External event (random time, random kind: corte_de_luz | temblor | aguacero)
 ```
 
 - Every station is a `Station(mesa.Agent)` instance with its own capacity
-  (fixed at 1), FIFO `deque` queue, and service-time range in simulated
-  minutes. A busy station queues incoming voters; freeing up pulls the next
-  one from the queue automatically.
+  (default 1, configurable per station), FIFO `deque` queue, and
+  service-time range in simulated minutes. A busy station queues incoming
+  voters; freeing up pulls the next one from the queue automatically.
 - Voters are `VoterAgent(mesa.Agent)` instances that react to `Message`s
   (`TURN`, `WAIT`) sent by whichever station is currently handling them.
 - The external event is scheduled by the model itself at a random point
@@ -108,6 +108,7 @@ Optional flags:
 - `--num-voters` — how many voter-arrival events to schedule (default 20).
 - `--arrival-rate` — average arrivals per simulated minute (default 1/3, i.e. ~1 every 3 minutes).
 - `--seed` — integer seed for reproducible runs (default: unseeded/random).
+- `--secretario-capacity`, `--mesa-capacity`, `--casilla-capacity`, `--urna-capacity` — how many voters each station can serve at once (default 1 each). Raise these to relieve the bottleneck at scale (e.g. `--casilla-capacity 3` for a 1400-voter run).
 
 ## Run the Tests
 
