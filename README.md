@@ -65,7 +65,7 @@ backend/
     agents.py                 VoterAgent, Station, Coordinador, Message
   tests/
     conftest.py                sys.path shim so `import casilla` resolves
-    test_casilla_model.py      pytest suite (currently out of date, see "Run the Tests")
+    test_casilla_model.py      pytest suite (scheduler, arrivals, stations, coordinador)
   main.py                      Console entry point (schedules arrivals, runs the clock to completion)
   requirements.txt             Python dependencies
 client-csharp/
@@ -116,13 +116,16 @@ cd backend
 .\.venv\Scripts\python.exe -m pytest -v
 ```
 
-> **Nota:** `test_casilla_model.py` todavía prueba la API del incremento
-> anterior (`model.schedule_voter_arrival`, `model.arrival_log`). Esa API se
-> reemplazó por `model.schedule_callback` / `model.event_log` al añadir las
-> estaciones, el coordinador y el evento externo, así que la suite falla
-> contra el código actual. Está pendiente actualizarla para cubrir la
-> cadena de estaciones, las colas FIFO, el `Coordinador` y el evento
-> externo.
+Verifies, across 12 cases: the core scheduler (chronological order
+regardless of insertion order, exact non-integer event times, same-timestamp
+priority tiebreaks, `run_until()` boundary/resume behavior, the
+weak-reference restriction on bare lambdas); voter arrivals (Poisson
+inter-arrival times reproducible with a seed, arrivals logged via
+`logging`, one `event_log` entry per station completion in chain order); a
+`Station` in isolation (FIFO queueing under capacity, `PAUSE`/`RESUME`
+blocking and releasing the queue); and the `Coordinador` (broadcasting
+`PAUSE`/`RESUME` to all four stations, the external event appearing exactly
+once in `event_log` with a valid kind and trigger time).
 
 ## Run the C# Client (temporarily inactive)
 
@@ -178,8 +181,7 @@ The following has been tested against a clean checkout for this increment (fresh
   and shows a `corte_de_luz`/`temblor`/`aguacero` event pausing all four
   stations and resuming them later (verified with `--seed 7` and `--seed 3`
   runs).
-- `pytest -v` is **not** currently green — see the note under "Run the
-  Tests" above.
+- `pytest -v` passes all 12 cases in `backend/tests/test_casilla_model.py`.
 
 The C# client and Unity integration bullets below reflect verification from a prior increment against the now-removed Flask demo, not re-verified this round:
 
