@@ -1,96 +1,45 @@
-from flask import Flask, jsonify
-from flasgger import Swagger
-from mesa import Agent, Model
+"""Console demo of the casilla INE event-driven simulation core.
 
-class WealthAgent(Agent):
-        """Agent that exchanges one unit of wealth with another agent."""
+Schedules voter-arrival events on Mesa's built-in priority queue and runs
+the simulated clock straight to completion via ``run_until`` (never a
+``step()`` loop), so the printed timestamps show genuine event-driven time
+jumps instead of fixed-tick advancement.
+"""
 
-        def __init__(self, model: Model, x: int, y: int) -> None:
-                super().__init__(model)
-                self.x = x
-                self.y = y
-                self.wealth = 1
-                self.state = "active"
+import argparse
+import logging
 
-        def step(self) -> None:
-                agents = list(self.model.agents)
-                other_agents = [agent for agent in agents if agent is not self]
-
-                self.x = self.model.random.randrange(self.model.width)
-                self.y = self.model.random.randrange(self.model.height)
-
-                if other_agents and self.wealth > 0:
-                        receiver = self.model.random.choice(other_agents)
-                        self.wealth -= 1
-                        receiver.wealth += 1
-                        self.state = f"gave wealth to agent {receiver.unique_id}"
-                else:
-                        self.state = "active"
+from casilla import CasillaModel
 
 
-class WealthModel(Model):
-        def __init__(self, agent_count: int = 10, width: int = 10, height: int = 10) -> None:
-                super().__init__()
-                self.width = width
-                self.height = height
+def main() -> None:
+    parser = argparse.ArgumentParser(
+        description="Demo del motor de eventos + reloj simulado (casilla INE)."
+    )
+    parser.add_argument("--num-voters", type=int, default=20)
+    parser.add_argument("--arrival-rate", type=float, default=1 / 3)
+    parser.add_argument("--seed", type=int, default=None)
+    args = parser.parse_args()
 
-                for _ in range(agent_count):
-                        WealthAgent(
-                                self,
-                                self.random.randrange(width),
-                                self.random.randrange(height),
-                        )
+    logging.basicConfig(
+        level=logging.INFO, format="[%(asctime)s] %(message)s", datefmt="%H:%M:%S"
+    )
 
-        def step(self) -> None:
-                self.agents.shuffle(inplace=True).do("step")
+    model = CasillaModel(
+        num_voters=args.num_voters,
+        arrival_rate=args.arrival_rate,
+        rng=args.seed,
+    )
 
+    horizon = (model.last_scheduled_arrival_time or 0.0) + 1.0
+    model.run_until(horizon)
 
-app = Flask(__name__)
-swagger = Swagger(app)
-model = WealthModel()
-
-
-@app.get("/get_agents")
-def get_agents():
-        """Get all agents and advance the simulation by one tick.
-        ---
-        responses:
-            200:
-                description: Current wealth-agent information.
-                schema:
-                    type: object
-                    properties:
-                        step:
-                            type: integer
-                        agents:
-                            type: array
-                            items:
-                                type: object
-                                properties:
-                                    id:
-                                        type: integer
-                                    x:
-                                        type: integer
-                                    y:
-                                        type: integer
-                                    wealth:
-                                        type: integer
-                                    state:
-                                        type: string
-        """
-        model.step()
-        agents = [
-                {
-                        "id": agent.unique_id,
-                        "x": agent.x,
-                        "y": agent.y,
-                        "wealth": agent.wealth,
-                        "state": agent.state,
-                }
-                for agent in model.agents
-        ]
-        return jsonify({"step": model.steps, "agents": agents})
+    logging.info(
+        "Simulación terminada en t=%.2f (%d votantes procesados)",
+        model.time,
+        len(model.arrival_log),
+    )
 
 
 if __name__ == "__main__":
-        app.run(host="127.0.0.1", port=5000, debug=True)
+    main()
