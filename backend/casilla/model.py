@@ -43,6 +43,7 @@ class CasillaModel(Model):
         mesa_capacity: int = 1,
         casilla_capacity: int = 1,
         urna_capacity: int = 1,
+        rejection_rate: float = 0.02,
         rng: int | None = None,
     ) -> None:
         super().__init__(rng=rng)
@@ -58,6 +59,7 @@ class CasillaModel(Model):
         self._voter_counter = 0
         self.event_log: list[dict] = []
         self.last_scheduled_arrival_time: float | None = None
+        self.rejection_rate = rejection_rate
 
         self.secretario = Station(
             self,
@@ -87,7 +89,7 @@ class CasillaModel(Model):
             self, stations=[self.secretario, self.mesa, self.casilla, self.urna]
         )
 
-        self.secretario.on_complete = lambda voter: self.mesa.request(voter)
+        self.secretario.on_complete = self._on_secretario_done
         self.mesa.on_complete = lambda voter: self.casilla.request(voter)
         self.casilla.on_complete = lambda voter: self.urna.request(voter)
         self.urna.on_complete = self._on_exit
@@ -135,6 +137,25 @@ class CasillaModel(Model):
         )
         logger.info("Votante %s llega en t=%.2f", voter.number, self.time)
         self.secretario.request(voter)
+
+    def _on_secretario_done(self, voter: VoterAgent) -> None:
+        if self.random.random() < self.rejection_rate:
+            message = Message(
+                sender=self.secretario,
+                receiver=voter,
+                type="REJECTED",
+                payload={"reason": "INE invalida"},
+                time=self.time,
+            )
+            voter.receive_message(message)
+            self.event_log.append(
+                {"event": "REJECTED", "voter": voter.number, "time": self.time}
+            )
+            logger.info(
+                "Votante %s RECHAZADO (INE invalida) en t=%.2f", voter.number, self.time
+            )
+            return
+        self.mesa.request(voter)
 
     def _on_exit(self, voter: VoterAgent) -> None:
         self.event_log.append(

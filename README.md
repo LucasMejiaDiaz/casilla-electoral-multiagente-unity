@@ -2,9 +2,9 @@
 
 > **Nota:** este README es provisional — documenta el motor de eventos, las
 > estaciones (secretario, mesa, casilla, urna), el agente votante, el
-> coordinador y el evento externo que funcionan hoy. Rechazo de INE
-> inválida, capacidad configurable por estación, grid espacial, el API
-> Flask y la integración con Unity todavía no están implementados.
+> coordinador, el evento externo, la capacidad configurable por estación y
+> el rechazo de INE inválida que funcionan hoy. Grid espacial, el API Flask
+> y la integración con Unity todavía no están implementados.
 
 A Mesa-based discrete-event simulation of a casilla de votación INE: voter
 agents arrive as a Poisson process and move through a chain of
@@ -26,8 +26,11 @@ Voter arrival (Poisson, --arrival-rate)
         |
         v
   secretario --TURN/WAIT--> mesa --TURN/WAIT--> casilla --TURN/WAIT--> urna --> exit
-   (1.5-2.5 min)          (0.5-1.5 min)        (2.0-4.0 min)        (0.2-0.6 min)
+   (1.5-2.5 min)   |      (0.5-1.5 min)        (2.0-4.0 min)        (0.2-0.6 min)
    each: configurable capacity (default 1), FIFO queue, random (uniform) service time
+                   | --rejection-rate (default 2%)
+                   v
+              REJECTED --> voter leaves the system (never reaches mesa)
 
 External event (random time, random kind: corte_de_luz | temblor | aguacero)
         |
@@ -43,7 +46,13 @@ External event (random time, random kind: corte_de_luz | temblor | aguacero)
   service-time range in simulated minutes. A busy station queues incoming
   voters; freeing up pulls the next one from the queue automatically.
 - Voters are `VoterAgent(mesa.Agent)` instances that react to `Message`s
-  (`TURN`, `WAIT`) sent by whichever station is currently handling them.
+  (`TURN`, `WAIT`, `REJECTED`) sent by whichever station is currently
+  handling them.
+- After the secretario finishes with a voter, there's a `--rejection-rate`
+  chance (default 2%) their INE is rejected: the model sends the voter a
+  `REJECTED` message, logs a `REJECTED` entry in `event_log`, and the voter
+  leaves the system right there — it never reaches mesa/casilla/urna.
+  Otherwise the voter continues down the chain as normal.
 - The external event is scheduled by the model itself at a random point
   within the run (not injected from outside), with a random kind and a
   random 3-10 minute duration. The `Coordinador` is the single place that
@@ -109,6 +118,7 @@ Optional flags:
 - `--arrival-rate` — average arrivals per simulated minute (default 1/3, i.e. ~1 every 3 minutes).
 - `--seed` — integer seed for reproducible runs (default: unseeded/random).
 - `--secretario-capacity`, `--mesa-capacity`, `--casilla-capacity`, `--urna-capacity` — how many voters each station can serve at once (default 1 each). Raise these to relieve the bottleneck at scale (e.g. `--casilla-capacity 3` for a 1400-voter run).
+- `--rejection-rate` — probability (0-1) that a voter's INE is rejected by the secretario, ending their run right there (default 0.02, i.e. 2%).
 
 ## Run the Tests
 
@@ -117,16 +127,19 @@ cd backend
 .\.venv\Scripts\python.exe -m pytest -v
 ```
 
-Verifies, across 12 cases: the core scheduler (chronological order
+Verifies, across 15 cases: the core scheduler (chronological order
 regardless of insertion order, exact non-integer event times, same-timestamp
 priority tiebreaks, `run_until()` boundary/resume behavior, the
 weak-reference restriction on bare lambdas); voter arrivals (Poisson
 inter-arrival times reproducible with a seed, arrivals logged via
-`logging`, one `event_log` entry per station completion in chain order); a
-`Station` in isolation (FIFO queueing under capacity, `PAUSE`/`RESUME`
-blocking and releasing the queue); and the `Coordinador` (broadcasting
-`PAUSE`/`RESUME` to all four stations, the external event appearing exactly
-once in `event_log` with a valid kind and trigger time).
+`logging`, one `event_log` entry per station completion in chain order);
+the INE rejection branch (a rejected voter stops after `SECRETARIO_DONE`
+and never reaches mesa, an accepted voter reaches `EXIT`); configurable
+per-station capacity; a `Station` in isolation (FIFO queueing under
+capacity, `PAUSE`/`RESUME` blocking and releasing the queue); and the
+`Coordinador` (broadcasting `PAUSE`/`RESUME` to all four stations, the
+external event appearing exactly once in `event_log` with a valid kind and
+trigger time).
 
 ## Run the C# Client (temporarily inactive)
 
@@ -182,7 +195,7 @@ The following has been tested against a clean checkout for this increment (fresh
   and shows a `corte_de_luz`/`temblor`/`aguacero` event pausing all four
   stations and resuming them later (verified with `--seed 7` and `--seed 3`
   runs).
-- `pytest -v` passes all 12 cases in `backend/tests/test_casilla_model.py`.
+- `pytest -v` passes all 15 cases in `backend/tests/test_casilla_model.py`.
 
 The C# client and Unity integration bullets below reflect verification from a prior increment against the now-removed Flask demo, not re-verified this round:
 

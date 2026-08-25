@@ -68,6 +68,8 @@ class VoterAgent(Agent):
             self.timestamps[station] = message.time
         elif message.type == "WAIT":
             self.status = f"esperando_{station}"
+        elif message.type == "REJECTED":
+            self.status = "rechazado"
 
 
 class Station(Agent):

@@ -25,6 +25,7 @@ def main() -> None:
     parser.add_argument("--mesa-capacity", type=int, default=1)
     parser.add_argument("--casilla-capacity", type=int, default=1)
     parser.add_argument("--urna-capacity", type=int, default=1)
+    parser.add_argument("--rejection-rate", type=float, default=0.02)
     args = parser.parse_args()
 
     logging.basicConfig(
@@ -38,16 +39,19 @@ def main() -> None:
         mesa_capacity=args.mesa_capacity,
         casilla_capacity=args.casilla_capacity,
         urna_capacity=args.urna_capacity,
+        rejection_rate=args.rejection_rate,
         rng=args.seed,
     )
 
     model.run_to_completion()
 
     num_exits = sum(1 for entry in model.event_log if entry["event"] == "EXIT")
+    num_rejected = sum(1 for entry in model.event_log if entry["event"] == "REJECTED")
     logging.info(
-        "Simulación terminada en t=%.2f (%d votantes procesados)",
+        "Simulación terminada en t=%.2f (%d votantes procesados, %d rechazados)",
         model.time,
         num_exits,
+        num_rejected,
     )
 
 

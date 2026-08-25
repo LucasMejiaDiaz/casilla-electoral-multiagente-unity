@@ -122,6 +122,40 @@ def test_event_log_records_each_station_completion_in_order():
     ]
 
 
+# --- INE rejection branch --------------------------------------------------
+
+
+def test_rejected_voter_exits_after_secretario_and_never_reaches_mesa():
+    model = CasillaModel(num_voters=0, rng=1, rejection_rate=1.0)
+    model.schedule_callback(model._on_voter_arrival, at=0.1)
+
+    model.run_to_completion()
+
+    events = [e["event"] for e in model.event_log]
+    assert events == ["ARRIVAL", "SECRETARIO_DONE", "REJECTED"]
+
+    voters = [a for a in model.agents if isinstance(a, VoterAgent)]
+    assert len(voters) == 1
+    assert voters[0].status == "rechazado"
+
+
+def test_accepted_voter_reaches_exit_when_rejection_rate_is_zero():
+    model = CasillaModel(num_voters=0, rng=1, rejection_rate=0.0)
+    model.schedule_callback(model._on_voter_arrival, at=0.1)
+
+    model.run_to_completion()
+
+    events = [e["event"] for e in model.event_log]
+    assert events == [
+        "ARRIVAL",
+        "SECRETARIO_DONE",
+        "MESA_DONE",
+        "CASILLA_DONE",
+        "URNA_DONE",
+        "EXIT",
+    ]
+
+
 def test_station_capacity_is_configurable_per_station():
     model = CasillaModel(
         num_voters=0,
