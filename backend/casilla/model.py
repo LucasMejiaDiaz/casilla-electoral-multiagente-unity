@@ -36,7 +36,7 @@ class CasillaModel(Model):
 
     def __init__(
         self,
-        num_voters: int = 20,
+        num_voters: int = 200,
         arrival_rate: float = 1 / 3,
         *,
         rng: int | None = None,
