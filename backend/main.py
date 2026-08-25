@@ -1,9 +1,11 @@
 """Console demo of the casilla INE event-driven simulation core.
 
-Schedules voter-arrival events on Mesa's built-in priority queue and runs
-the simulated clock straight to completion via ``run_until`` (never a
-``step()`` loop), so the printed timestamps show genuine event-driven time
-jumps instead of fixed-tick advancement.
+Schedules voter arrivals on Mesa's built-in priority queue and runs each
+voter through the secretario -> mesa -> casilla -> urna station chain,
+plus one external event that pauses every station for a while. The clock
+is driven to completion event by event (never a ``step()`` loop), so the
+printed timestamps show genuine event-driven time jumps instead of
+fixed-tick advancement.
 """
 
 import argparse
@@ -31,13 +33,13 @@ def main() -> None:
         rng=args.seed,
     )
 
-    horizon = (model.last_scheduled_arrival_time or 0.0) + 1.0
-    model.run_until(horizon)
+    model.run_to_completion()
 
+    num_exits = sum(1 for entry in model.event_log if entry["event"] == "EXIT")
     logging.info(
         "Simulación terminada en t=%.2f (%d votantes procesados)",
         model.time,
-        len(model.arrival_log),
+        num_exits,
     )
 
 
