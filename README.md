@@ -114,7 +114,7 @@ Optional flags:
 .\.venv\Scripts\python.exe main.py --num-voters 30 --arrival-rate 0.5 --seed 7
 ```
 
-- `--num-voters` — how many voter-arrival events to schedule (default 20).
+- `--num-voters` — how many voter-arrival events to schedule (default 200).
 - `--arrival-rate` — average arrivals per simulated minute (default 1/3, i.e. ~1 every 3 minutes).
 - `--seed` — integer seed for reproducible runs (default: unseeded/random).
 - `--secretario-capacity`, `--mesa-capacity`, `--casilla-capacity`, `--urna-capacity` — how many voters each station can serve at once (default 1 each). Raise these to relieve the bottleneck at scale (e.g. `--casilla-capacity 3` for a 1400-voter run).

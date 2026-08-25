@@ -18,7 +18,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description="Demo del motor de eventos + reloj simulado (casilla INE)."
     )
-    parser.add_argument("--num-voters", type=int, default=20)
+    parser.add_argument("--num-voters", type=int, default=200)
     parser.add_argument("--arrival-rate", type=float, default=1 / 3)
     parser.add_argument("--seed", type=int, default=None)
     parser.add_argument("--secretario-capacity", type=int, default=1)
