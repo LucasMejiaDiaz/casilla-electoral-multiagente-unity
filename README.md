@@ -1,5 +1,10 @@
 # Multi-Agent Wealth Distribution Simulation
 
+> **Nota:** este README es provisional — documenta la demo que funciona hoy
+> (un modelo Mesa de intercambio de riqueza). Es el punto de partida sobre
+> el que se construirá la simulación de una casilla de votación INE; esa
+> parte todavía no está implementada.
+
 A Mesa-based wealth distribution simulation exposed through a Flask API, consumed by a C# console client, and visualized in Unity.
 
 ## Architecture
@@ -16,6 +21,7 @@ Each agent has an identifier, a 2D position, a wealth value, and a state describ
 ```text
 backend/
   main.py                    Flask API and Mesa model
+  requirements.txt           Python dependencies
 client-csharp/
   Program.cs                 C# HTTP client
 unity-client/
@@ -27,16 +33,23 @@ unity-client/
 
 ## Requirements
 
-- Python 3
+- Python 3.12+ (tested with 3.12.10)
 - .NET 9 SDK
 - Unity 6.4 or a compatible Unity 6 editor
 
 ## Run the Flask Backend
 
-From the project root, open a terminal and run:
+From the project root, create a virtual environment and install dependencies (only needed once):
 
 ```powershell
 cd backend
+python -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+```
+
+Then start the server:
+
+```powershell
 .\.venv\Scripts\python.exe main.py
 ```
 
@@ -95,10 +108,10 @@ Unity polls the Flask endpoint once per second, creates one sphere per agent, up
 
 ## Verification
 
-The following parts have been tested:
+The following parts have been tested against a clean checkout (fresh venv, `pip install -r requirements.txt`, `dotnet build`):
 
-- Flask returns HTTP 200 and agent data from `/get_agents`.
-- The C# client successfully retrieves and displays the API response.
+- Flask returns HTTP 200 and agent data from `/get_agents`, and Swagger UI loads at `/apidocs`.
+- The C# client builds and successfully retrieves and displays the API response.
 - Unity compiles the integration script and displays the agents in the scene.
 
 ## AI Assistance Disclosure
