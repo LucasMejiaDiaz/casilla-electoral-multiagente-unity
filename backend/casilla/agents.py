@@ -119,6 +119,14 @@ class Station(Agent):
             voter.number,
             self.model.time,
         )
+        self.model.event_log.append(
+            {
+                "event": f"{self.name.upper()}_DONE",
+                "voter": voter.number,
+                "station": self.name,
+                "time": self.model.time,
+            }
+        )
         if self.on_complete is not None:
             self.on_complete(voter)
         self._pull_from_queue()
