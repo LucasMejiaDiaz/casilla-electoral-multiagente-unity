@@ -4,7 +4,7 @@ Proyecto académico que modela una casilla electoral mediante agentes, eventos d
 
 > **Estado actual:** el motor de Python y la escena de Unity funcionan por separado. Unity incluye un modo de demostración y está preparado para consumir `GET /get_agents`, pero el servidor HTTP que une ambos componentes todavía está pendiente.
 
-![Vista del escenario](unity-client/MultiAgent-simulation/Assets/Documentation/PollingStationAndaresPreview.png)
+
 
 ## Objetivo
 
