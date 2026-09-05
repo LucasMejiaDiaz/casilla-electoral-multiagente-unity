@@ -134,7 +134,7 @@ unity-client/MultiAgent-simulation/
 
 - Python 3.12 o compatible.
 - Unity `6000.4.2f1` o una versión compatible de Unity 6.
-- Git LFS para descargar el FBX y las imágenes.
+- Git para clonar el repositorio; el FBX y las imágenes se almacenan como archivos normales.
 - Blender sólo para volver a exportar el archivo fuente.
 - .NET 9 únicamente para el cliente C# de consola.
 
