@@ -1,0 +1,8 @@
+* text=auto
+
+# Macros must be declared at the repository root.
+[attr]unity-json eol=lf linguist-language=json
+[attr]unity-yaml merge=unityyamlmerge eol=lf linguist-language=yaml
+
+# The current binary assets are small enough for regular Git storage.
+# Avoiding Git LFS keeps student forks usable without an LFS quota.

@@ -1,207 +1,303 @@
-# Casilla INE Multi-Agent Simulation
+# Simulación multiagente de una casilla electoral
 
-> **Nota:** este README es provisional — documenta el motor de eventos, las
-> estaciones (secretario, mesa, casilla, urna), el agente votante, el
-> coordinador, el evento externo, la capacidad configurable por estación y
-> el rechazo de INE inválida que funcionan hoy. Grid espacial, el API Flask
-> y la integración con Unity todavía no están implementados.
+Proyecto académico que modela una casilla electoral mediante agentes, eventos discretos y una visualización 3D en Unity. Python representa llegadas, filas, atención, rechazos y eventos externos; Unity representa el escenario y mueve visualmente a los votantes entre las etapas.
 
-A Mesa-based discrete-event simulation of a casilla de votación INE: voter
-agents arrive as a Poisson process and move through a chain of
-capacity-limited stations — secretario → mesa → casilla → urna — each with
-its own FIFO wait queue and randomized service time. All hand-offs (a
-station giving a voter their turn or telling them to wait, the coordinator
-pausing/resuming a station) are explicit `Message` objects, not bare method
-calls. A random external event (corte de luz, temblor, aguacero) fires once
-per run and is broadcast by a `Coordinador` agent to pause every station for
-a while. The simulated clock is Mesa's built-in priority-queue event
-scheduler — it jumps directly from event to event, never fixed ticks. A C#
-console client and a Unity visualization exist but are temporarily inactive
-— they depended on a Flask API that will return in a later increment.
+> **Estado actual:** el motor de Python y la escena de Unity funcionan por separado. Unity incluye un modo de demostración y está preparado para consumir `GET /get_agents`, pero el servidor HTTP que une ambos componentes todavía está pendiente.
 
-## How the Simulation Works
+![Vista del escenario](unity-client/MultiAgent-simulation/Assets/Documentation/PollingStationAndaresPreview.png)
+
+## Objetivo
+
+La simulación permite experimentar con una casilla sin intervenir en un sistema real y estudiar preguntas como:
+
+- ¿Dónde se forman los cuellos de botella?
+- ¿Cómo cambia la espera al modificar la capacidad de una estación?
+- ¿Qué ocurre cuando una credencial es rechazada?
+- ¿Cómo afecta un corte de luz, temblor o aguacero?
+- ¿Cuántos votantes completan el proceso durante la jornada?
+
+## Arquitectura
 
 ```text
-Voter arrival (Poisson, --arrival-rate)
-        |
-        v
-  secretario --TURN/WAIT--> mesa --TURN/WAIT--> casilla --TURN/WAIT--> urna --> exit
-   (1.5-2.5 min)   |      (0.5-1.5 min)        (2.0-4.0 min)        (0.2-0.6 min)
-   each: configurable capacity (default 1), FIFO queue, random (uniform) service time
-                   | --rejection-rate (default 2%)
-                   v
-              REJECTED --> voter leaves the system (never reaches mesa)
-
-External event (random time, random kind: corte_de_luz | temblor | aguacero)
-        |
-        v
-  Coordinador --PAUSE broadcast--> secretario, mesa, casilla, urna
-        | (after a random duration)
-        v
-  Coordinador --RESUME broadcast--> secretario, mesa, casilla, urna
+PYTHON / MESA
+Agentes + filas FIFO + reloj de eventos + probabilidades
+                         │
+                         │ GET /get_agents (pendiente)
+                         ▼
+CONTRATO JSON
+SimulationSnapshot + AgentSnapshot + ExternalEventSnapshot
+                         │
+                         ▼
+UNITY
+Estado lógico → punto del escenario → movimiento suave
+                         │
+                         ▼
+Entrada → Secretario → Mesa → Mampara → Urna → Salida
 ```
 
-- Every station is a `Station(mesa.Agent)` instance with its own capacity
-  (default 1, configurable per station), FIFO `deque` queue, and
-  service-time range in simulated minutes. A busy station queues incoming
-  voters; freeing up pulls the next one from the queue automatically.
-- Voters are `VoterAgent(mesa.Agent)` instances that react to `Message`s
-  (`TURN`, `WAIT`, `REJECTED`) sent by whichever station is currently
-  handling them.
-- After the secretario finishes with a voter, there's a `--rejection-rate`
-  chance (default 2%) their INE is rejected: the model sends the voter a
-  `REJECTED` message, logs a `REJECTED` entry in `event_log`, and the voter
-  leaves the system right there — it never reaches mesa/casilla/urna.
-  Otherwise the voter continues down the chain as normal.
-- The external event is scheduled by the model itself at a random point
-  within the run (not injected from outside), with a random kind and a
-  random 3-10 minute duration. The `Coordinador` is the single place that
-  broadcasts to all four stations — this is the actual inter-agent
-  communication the event triggers, not the event by itself.
-- `model.event_log` records `ARRIVAL`, `EXIT`, and `EXTERNAL_EVENT` entries
-  with simulated timestamps; every message send/receive and station
-  start/stop is also logged via `logging` (not `print`).
-- The clock is driven event-by-event to completion with
-  `model.run_to_completion()` — never a `step()` loop.
+- **Python decide qué ocurre:** llegadas, tiempos, filas, turnos, rechazos y eventos.
+- **Unity decide cómo se ve:** posiciones, movimiento, cámara, iluminación, materiales e interfaz.
+- Unity no vuelve a calcular la simulación y Python no necesita conocer coordenadas 3D.
 
-## Project Structure
+## Funcionalidad implementada
+
+### Motor de Python
+
+- Votantes implementados como agentes de Mesa.
+- Llegadas generadas como proceso de Poisson mediante tiempos exponenciales.
+- Cuatro estaciones: secretario, mesa, casilla y urna.
+- Capacidad configurable y filas FIFO independientes.
+- Tiempos de atención aleatorios uniformes.
+- Mensajes explícitos `TURN`, `WAIT`, `REJECTED`, `PAUSE` y `RESUME`.
+- Probabilidad configurable de rechazo de credencial.
+- Coordinador que comunica eventos externos a todas las estaciones.
+- Eventos externos: `corte_de_luz`, `temblor` y `aguacero`.
+- Reloj discreto que avanza directamente al siguiente evento.
+- Registro cronológico en `event_log`.
+- 15 pruebas automatizadas.
+
+### Escena de Unity
+
+- Escena principal `PollingStationAndares.unity`.
+- Modelo de Blender importado como FBX.
+- Anchors de entrada, salida, filas y servicio reutilizados desde el modelo.
+- Una sola representación visual por identificador de votante.
+- Movimiento suave con `Vector3.MoveTowards`.
+- Color permanente por votante.
+- Soporte para todos los estados electorales acordados.
+- Generación de posiciones adicionales cuando una fila crece.
+- Retención breve y reciclaje de agentes rechazados o que salieron.
+- Zona `Fallback` para estados desconocidos.
+- Modo de demostración sin backend.
+- Cliente HTTP preparado para `/get_agents`.
+- Reloj, contadores, estado de conexión y aviso de evento externo.
+- Cambio de iluminación durante un corte de luz.
+- Cámara, señalización, flechas y marcas de espera.
+- Placeholders reemplazables para los assets definitivos.
+
+## Recorrido del votante
+
+```text
+arrived
+   ↓
+esperando_secretario → en_secretario
+   ↓
+esperando_mesa       → en_mesa
+   ↓
+esperando_casilla    → en_casilla
+   ↓
+esperando_urna       → en_urna
+   ↓
+salio
+
+Rama alternativa:
+en_secretario → rechazado
+```
+
+En Python, una estación envía `WAIT` cuando no tiene capacidad y `TURN` cuando comienza la atención. Unity traduce el estado a un destino visual; no altera la decisión.
+
+## Estructura
 
 ```text
 backend/
-  casilla/
-    __init__.py               Exports CasillaModel
-    model.py                  CasillaModel: builds stations/coordinador, schedules arrivals + external event
-    agents.py                 VoterAgent, Station, Coordinador, Message
-  tests/
-    conftest.py                sys.path shim so `import casilla` resolves
-    test_casilla_model.py      pytest suite (scheduler, arrivals, stations, coordinador)
-  main.py                      Console entry point (schedules arrivals, runs the clock to completion)
-  requirements.txt             Python dependencies
+├── casilla/
+│   ├── agents.py                 Agentes, estaciones, mensajes y coordinador
+│   └── model.py                  Modelo, eventos, llegadas y transiciones
+├── tests/test_casilla_model.py   Pruebas automatizadas
+├── main.py                       Demostración en consola
+└── requirements.txt
+
 client-csharp/
-  Program.cs                   C# HTTP client (temporarily inactive, see below)
-unity-client/
-  MultiAgent-simulation/       Unity project
-    Assets/Scripts/
-      FlaskAgentClient.cs      Unity API integration (temporarily inactive, see below)
-.gitignore
+└── Program.cs                    Cliente HTTP de referencia
+
+unity-client/MultiAgent-simulation/
+├── Assets/
+│   ├── Editor/PollingStationSceneBuilder.cs
+│   ├── Models/PollingStation/casilla_votacion.fbx
+│   ├── Prefabs/PollingStation/   Placeholders reemplazables
+│   ├── Scenes/
+│   │   ├── PollingStationAndares.unity
+│   │   └── SampleScene.unity     Respaldo original
+│   ├── Scripts/Simulation/
+│   │   ├── SimulationContracts.cs
+│   │   ├── SimulationStateProvider.cs
+│   │   ├── AgentViewManager.cs
+│   │   ├── AgentView.cs
+│   │   ├── SceneLayout.cs
+│   │   └── ExternalEventVisualizer.cs
+│   └── Tests/EditMode/
+├── Tools/Blender/export_casilla_to_unity.py
+└── UNITY_INTEGRATION.md          Guía detallada de integración
 ```
 
-## Requirements
+## Requisitos
 
-- Python 3.12+ (tested with 3.12.10)
-- .NET 9 SDK (only needed for the currently-inactive C# client)
-- Unity 6.4 or a compatible Unity 6 editor (only needed for the currently-inactive Unity integration)
+- Python 3.12 o compatible.
+- Unity `6000.4.2f1` o una versión compatible de Unity 6.
+- Git LFS para descargar el FBX y las imágenes.
+- Blender sólo para volver a exportar el archivo fuente.
+- .NET 9 únicamente para el cliente C# de consola.
 
-## Run the Simulation Demo
+## Ejecutar Python
 
-From the project root, create a virtual environment and install dependencies (only needed once):
+Desde la raíz:
 
 ```powershell
 cd backend
 python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
-```
-
-Then run the demo:
-
-```powershell
 .\.venv\Scripts\python.exe main.py
 ```
 
-Optional flags:
+Ejemplo reproducible:
 
 ```powershell
 .\.venv\Scripts\python.exe main.py --num-voters 30 --arrival-rate 0.5 --seed 7
 ```
 
-- `--num-voters` — how many voter-arrival events to schedule (default 200).
-- `--arrival-rate` — average arrivals per simulated minute (default 1/3, i.e. ~1 every 3 minutes).
-- `--seed` — integer seed for reproducible runs (default: unseeded/random).
-- `--secretario-capacity`, `--mesa-capacity`, `--casilla-capacity`, `--urna-capacity` — how many voters each station can serve at once (default 1 each). Raise these to relieve the bottleneck at scale (e.g. `--casilla-capacity 3` for a 1400-voter run).
-- `--rejection-rate` — probability (0-1) that a voter's INE is rejected by the secretario, ending their run right there (default 0.02, i.e. 2%).
+| Parámetro | Descripción |
+|---|---|
+| `--num-voters` | Cantidad de votantes programados. |
+| `--arrival-rate` | Tasa promedio de llegadas por minuto. |
+| `--seed` | Semilla para repetir un experimento. |
+| `--secretario-capacity` | Capacidad simultánea del secretario. |
+| `--mesa-capacity` | Capacidad simultánea de la mesa. |
+| `--casilla-capacity` | Cantidad de mamparas disponibles. |
+| `--urna-capacity` | Cantidad de urnas disponibles. |
+| `--rejection-rate` | Probabilidad de rechazo de la credencial. |
 
-## Run the Tests
+### Pruebas de Python
 
 ```powershell
 cd backend
 .\.venv\Scripts\python.exe -m pytest -v
 ```
 
-Verifies, across 15 cases: the core scheduler (chronological order
-regardless of insertion order, exact non-integer event times, same-timestamp
-priority tiebreaks, `run_until()` boundary/resume behavior, the
-weak-reference restriction on bare lambdas); voter arrivals (Poisson
-inter-arrival times reproducible with a seed, arrivals logged via
-`logging`, one `event_log` entry per station completion in chain order);
-the INE rejection branch (a rejected voter stops after `SECRETARIO_DONE`
-and never reaches mesa, an accepted voter reaches `EXIT`); configurable
-per-station capacity; a `Station` in isolation (FIFO queueing under
-capacity, `PAUSE`/`RESUME` blocking and releasing the queue); and the
-`Coordinador` (broadcasting `PAUSE`/`RESUME` to all four stations, the
-external event appearing exactly once in `event_log` with a valid kind and
-trigger time).
+La suite verifica orden cronológico, empates, llegadas probabilísticas, recorrido, rechazo, capacidades, filas FIFO y pausa/reanudación por evento externo.
 
-## Run the C# Client (temporarily inactive)
+## Ejecutar Unity
 
-> The Flask API this client depends on was removed in an earlier increment (see "Run the Simulation Demo" above). These instructions are preserved for when the Flask API returns in a future increment; running them now will fail to connect.
+1. Agregar `unity-client/MultiAgent-simulation` desde Unity Hub.
+2. Abrir el proyecto con Unity 6.
+3. Abrir `Assets/Scenes/PollingStationAndares.unity`.
+4. Presionar **Play**.
 
-```powershell
-cd client-csharp
-dotnet run
-```
-
-The client sends an HTTP request to Flask and prints the formatted JSON response.
-
-## Run the Unity Integration (temporarily inactive)
-
-> The Flask API this integration depends on was removed in an earlier increment. These instructions are preserved for when the Flask API returns in a future increment; running them now will show a connection error in the Game window.
-
-1. Open `unity-client/MultiAgent-simulation` in Unity.
-2. Open `Assets/Scenes/SampleScene`.
-3. Press **Play**.
-4. Unity polls the Flask endpoint once per second and would display agents once the API returns.
-
-## Example Console Output
+Mientras no exista el servidor HTTP aparecerá:
 
 ```text
-[16:22:29] Votante 1 llega en t=0.54
-[16:22:29] secretario envia TURN a votante 1 en t=0.54
-[16:22:29] Votante 1 recibe TURN de secretario en t=0.54
-[16:22:29] EVENTO EXTERNO: temblor en t=1.79 (dura 4.82 min)
-[16:22:29] Coordinador recibe EXTERNAL_EVENT (temblor, dura 4.82 min) en t=1.79
-[16:22:29] Coordinador envia PAUSE a secretario en t=1.79
-[16:22:29] secretario recibe PAUSE de Coordinador en t=1.79
-...
-[16:22:29] Votante 2 llega en t=2.12
-[16:22:29] secretario envia WAIT a votante 2 en t=2.12
-[16:22:29] Votante 2 recibe WAIT de secretario en t=2.12
-...
-[16:22:29] Coordinador envia RESUME a secretario en t=6.61
-[16:22:29] secretario recibe RESUME de Coordinador en t=6.61
-[16:22:29] secretario envia TURN a votante 2 en t=6.61
-...
-[16:22:29] urna termina con votante 1 en t=11.80
-[16:22:29] Votante 1 EXITS en t=11.80
-...
-[16:22:29] Simulación terminada en t=28.72 (6 votantes procesados)
+Modo demostración (sin backend)
 ```
 
-## Verification
+Este modo genera estados ficticios para comprobar escena y movimiento. No son resultados de Python.
 
-The following has been tested against a clean checkout for this increment (fresh venv, `pip install -r requirements.txt`):
+### Reconstruir la escena
 
-- `python main.py` runs to completion, chains every voter through
-  secretario → mesa → casilla → urna → exit in strict chronological order,
-  and shows a `corte_de_luz`/`temblor`/`aguacero` event pausing all four
-  stations and resuming them later (verified with `--seed 7` and `--seed 3`
-  runs).
-- `pytest -v` passes all 15 cases in `backend/tests/test_casilla_model.py`.
+Después de modificar el FBX o el generador:
 
-The C# client and Unity integration bullets below reflect verification from a prior increment against the now-removed Flask demo, not re-verified this round:
+1. Detener **Play**.
+2. Elegir **Tools → Polling Station → Build Andares Scene**.
+3. Abrir nuevamente `PollingStationAndares.unity`.
 
-- The C# client builds and successfully retrieves and displays an API response.
-- Unity compiles the integration script and displays agents in the scene.
+El generador conserva `SampleScene` como respaldo y crea materiales, placeholders, jerarquía, puntos, cámara, iluminación e interfaz.
 
-## AI Assistance Disclosure
+## Contrato para conectar Python y Unity
 
-AI tools were used to assist with code creation, debugging, documentation, and understanding the technology stack. The implementation was reviewed and tested by the student, who understands the main concepts involved: Mesa's event-driven scheduling, discrete-event simulation, inter-agent messaging, HTTP communication with C#, and Unity integration using `UnityWebRequest`.
+Unity está preparado para consultar:
+
+```text
+GET http://127.0.0.1:5000/get_agents
+```
+
+Respuesta esperada:
+
+```json
+{
+  "step": 12,
+  "simulation_time": 42.5,
+  "running": true,
+  "paused": false,
+  "external_event": {
+    "active": false,
+    "kind": "",
+    "remaining": 0.0
+  },
+  "agents": [
+    {
+      "id": 17,
+      "state": "esperando_urna",
+      "station": "urna",
+      "queue_position": 2
+    }
+  ]
+}
+```
+
+Reglas:
+
+- `queue_position` comienza en cero.
+- Si falta, Unity asigna provisionalmente el primer lugar libre.
+- `state` también puede recibirse temporalmente como `status`.
+- `salio` y `rechazado` permanecen dos actualizaciones antes de reciclarse.
+- Un estado desconocido utiliza `Fallback` sin detener la escena.
+- Python debe marcar `voter.status = "salio"` al terminar.
+- Para activar el backend se implementa el endpoint y se cambia `useMockData` a `false`.
+
+## Assets definitivos
+
+El escenario detallado procede del archivo Blender entregado por el equipo. Este repositorio no reclama autoría sobre esos modelos; la implementación realizada los exporta, configura y conecta con la simulación.
+
+Los reemplazos deben usar preferentemente:
+
+- Escala aproximada en metros.
+- Pivote al nivel del piso.
+- Orientación frontal hacia `+Z`.
+- Materiales independientes.
+- Colliders sencillos cuando sean necesarios.
+
+```text
+VoterPlaceholder       → persona
+SecretaryPlaceholder   → funcionario
+TablePlaceholder       → mesa
+BoothPlaceholder       → mampara
+BallotBoxPlaceholder   → urna
+```
+
+Anchors utilizados:
+
+```text
+SPAWN / EXIT
+QUEUE_GENERAL_*
+QUEUE_MESA_*
+QUEUE_CASILLA_*
+QUEUE_URNA_*
+SLOT_SECRETARIO_*
+SLOT_MESA_*
+SLOT_CASILLA_*
+SLOT_URNA_*
+```
+
+## Trabajo pendiente
+
+- Crear el servidor Flask o equivalente.
+- Mantener disponibles los votantes activos.
+- Calcular `queue_position` desde las filas reales de Python.
+- Exponer el evento externo y su tiempo restante.
+- Marcar explícitamente el estado `salio`.
+- Desactivar los datos de demostración.
+- Probar reinicio, JSON inválido y reconexión.
+- Sustituir placeholders por los assets definitivos.
+- Comparar métricas de varios escenarios.
+
+## Verificación actual
+
+- Python: **15 pruebas automatizadas aprobadas**.
+- Unity: **4 pruebas EditMode aprobadas** para contratos, filas y reciclaje.
+- La escena funciona en modo de demostración.
+- El modelo FBX, anchors y materiales fueron importados.
+- El puente HTTP definitivo todavía está pendiente.
+
+## Colaboración y reconocimiento
+
+Antes de modificar la integración, revisar [UNITY_INTEGRATION.md](unity-client/MultiAgent-simulation/UNITY_INTEGRATION.md). Se recomienda separar cambios del backend, puente y assets para reducir conflictos.
+
+Este es un trabajo colaborativo del equipo del RETO. El modelo tridimensional fuente fue proporcionado por el equipo. Se utilizaron herramientas de inteligencia artificial como apoyo para analizar, implementar, depurar y documentar; los integrantes deben revisar y comprender el funcionamiento antes de presentarlo.

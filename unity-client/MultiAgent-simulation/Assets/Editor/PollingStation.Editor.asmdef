@@ -1,0 +1,10 @@
+{
+  "name": "PollingStation.Editor",
+  "rootNamespace": "PollingStation.Editor",
+  "references": [
+    "PollingStation.Simulation"
+  ],
+  "includePlatforms": [
+    "Editor"
+  ]
+}

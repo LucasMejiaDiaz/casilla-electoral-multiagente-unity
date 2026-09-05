@@ -1,0 +1,13 @@
+{
+  "name": "PollingStation.Simulation.Tests",
+  "rootNamespace": "PollingStation.Simulation.Tests",
+  "references": [
+    "PollingStation.Simulation"
+  ],
+  "includePlatforms": [
+    "Editor"
+  ],
+  "optionalUnityReferences": [
+    "TestAssemblies"
+  ]
+}
