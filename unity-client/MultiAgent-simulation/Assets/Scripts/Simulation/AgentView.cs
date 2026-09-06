@@ -8,7 +8,9 @@ namespace PollingStation.Simulation
         private Vector3 target;
         private bool movementPaused;
         private Renderer[] renderers;
+        private Animator[] animators;
         private MaterialPropertyBlock colorProperties;
+        private bool? wasMoving;
 
         public int AgentId { get; private set; }
         public string CurrentState { get; private set; } = "unknown";
@@ -23,6 +25,7 @@ namespace PollingStation.Simulation
         {
             if (movementPaused)
             {
+                SetMoving(false);
                 return;
             }
 
@@ -37,6 +40,8 @@ namespace PollingStation.Simulation
                     Quaternion.LookRotation(direction),
                     12f * Time.deltaTime);
             }
+
+            SetMoving((target - transform.position).sqrMagnitude > 0.0001f);
         }
 
         public void Initialize(int agentId, float movementSpeed)
@@ -45,6 +50,8 @@ namespace PollingStation.Simulation
             AgentId = agentId;
             speed = movementSpeed;
             gameObject.name = $"Votante_{agentId}";
+            wasMoving = null;
+            SetMoving(false);
         }
 
         public void ApplyState(string state, Vector3 destination, bool immediate)
@@ -80,11 +87,47 @@ namespace PollingStation.Simulation
             {
                 renderers = GetComponentsInChildren<Renderer>();
             }
+
+            if (animators == null)
+            {
+                animators = GetComponentsInChildren<Animator>();
+            }
         }
 
         public void SetPaused(bool paused)
         {
             movementPaused = paused;
+            if (paused)
+            {
+                SetMoving(false);
+            }
+        }
+
+        private void SetMoving(bool moving)
+        {
+            EnsureRenderers();
+            if (wasMoving == moving)
+            {
+                return;
+            }
+
+            wasMoving = moving;
+            foreach (Animator animator in animators)
+            {
+                if (animator == null || animator.runtimeAnimatorController == null)
+                {
+                    continue;
+                }
+
+                foreach (AnimatorControllerParameter parameter in animator.parameters)
+                {
+                    if (parameter.name == "Moving" && parameter.type == AnimatorControllerParameterType.Bool)
+                    {
+                        animator.SetBool("Moving", moving);
+                        break;
+                    }
+                }
+            }
         }
 
         private static Color ColorForAgent(int id)

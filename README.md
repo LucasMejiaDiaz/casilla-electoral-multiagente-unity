@@ -73,7 +73,9 @@ Entrada → Secretario → Mesa → Mampara → Urna → Salida
 - Reloj, contadores, estado de conexión y aviso de evento externo.
 - Cambio de iluminación durante un corte de luz.
 - Cámara, señalización, flechas y marcas de espera.
-- Placeholders reemplazables para los assets definitivos.
+- Mesas, sillas, mamparas y urnas del equipo importadas y disponibles para ajuste posterior.
+- Modelo femenino del equipo con animaciones de reposo y caminata.
+- Mobiliario original del escenario conservado para evitar deformaciones visuales.
 
 ## Recorrido del votante
 
@@ -114,6 +116,8 @@ unity-client/MultiAgent-simulation/
 ├── Assets/
 │   ├── Editor/PollingStationSceneBuilder.cs
 │   ├── Models/PollingStation/casilla_votacion.fbx
+│   ├── Models/PollingStation/TeamAssets/  Modelos individuales del equipo
+│   ├── Animations/PollingStation/         Controlador Idle/Walk del votante
 │   ├── Prefabs/PollingStation/   Placeholders reemplazables
 │   ├── Scenes/
 │   │   ├── PollingStationAndares.unity
@@ -244,7 +248,7 @@ Reglas:
 
 ## Assets definitivos
 
-El escenario detallado procede del archivo Blender entregado por el equipo. Este repositorio no reclama autoría sobre esos modelos; la implementación realizada los exporta, configura y conecta con la simulación.
+El escenario detallado y los modelos individuales proceden de archivos Blender/FBX entregados por el equipo. Este repositorio no reclama autoría sobre esos modelos; la implementación realizada los configura y conecta con la visualización.
 
 Los reemplazos deben usar preferentemente:
 
@@ -285,7 +289,9 @@ SLOT_URNA_*
 - Marcar explícitamente el estado `salio`.
 - Desactivar los datos de demostración.
 - Probar reinicio, JSON inválido y reconexión.
-- Sustituir placeholders por los assets definitivos.
+- Agregar el modelo masculino cuando el equipo termine de copiarle las animaciones.
+- Ajustar manualmente escala, pivote y orientación del mobiliario individual antes de activarlo.
+- Revisar materiales finales de los modelos del equipo.
 - Comparar métricas de varios escenarios.
 
 ## Verificación actual

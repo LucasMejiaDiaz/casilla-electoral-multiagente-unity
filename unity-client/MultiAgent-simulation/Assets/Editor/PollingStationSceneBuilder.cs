@@ -1,7 +1,9 @@
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using PollingStation.Simulation;
 using UnityEditor;
+using UnityEditor.Animations;
 using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.Rendering;
@@ -16,6 +18,13 @@ namespace PollingStation.Editor
         private const string PrefabPath = "Assets/Prefabs/PollingStation";
         private const string MaterialPath = "Assets/Materials/PollingStation";
         private const string DetailedModelPath = "Assets/Models/PollingStation/casilla_votacion.fbx";
+        private const string TeamAssetPath = "Assets/Models/PollingStation/TeamAssets";
+        private const string TeamTablePath = TeamAssetPath + "/mesa.fbx";
+        private const string TeamBoothPath = TeamAssetPath + "/Casilla.fbx";
+        private const string TeamBallotBoxPath = TeamAssetPath + "/Urna.fbx";
+        private const string TeamChairPath = TeamAssetPath + "/Silla.fbx";
+        private const string TeamWomanPath = TeamAssetPath + "/modelo_mujer.fbx";
+        private const string VoterControllerPath = "Assets/Animations/PollingStation/TeamVoter.controller";
 
         private static readonly Dictionary<string, Color> DetailedMaterialColors = new Dictionary<string, Color>
         {
@@ -257,6 +266,135 @@ namespace PollingStation.Editor
             SetNamedActive(model, "Postes_Fila", false);
         }
 
+        private static void ApplyTeamAssetReplacements(Transform sceneRoot, Transform detailedModel)
+        {
+            if (AssetDatabase.LoadAssetAtPath<GameObject>(TeamTablePath) == null &&
+                AssetDatabase.LoadAssetAtPath<GameObject>(TeamBoothPath) == null &&
+                AssetDatabase.LoadAssetAtPath<GameObject>(TeamBallotBoxPath) == null)
+            {
+                return;
+            }
+
+            GameObject replacements = Child(sceneRoot.gameObject, "TeamAssetReplacements");
+
+            for (int index = 0; index < 6; index++)
+            {
+                string tableName = $"Secretario_{index:00}";
+                ReplaceDetailedTarget(replacements.transform, detailedModel, tableName, TeamTablePath, Quaternion.Euler(0f, 90f, 0f));
+                ReplaceDetailedTarget(replacements.transform, detailedModel, tableName + "_Sillas", TeamChairPath, Quaternion.Euler(0f, 90f, 0f));
+            }
+
+            for (int index = 0; index < 3; index++)
+            {
+                ReplaceDetailedTarget(
+                    replacements.transform,
+                    detailedModel,
+                    $"MesaDirectiva_{index:00}",
+                    TeamTablePath,
+                    Quaternion.Euler(0f, 90f, 0f));
+            }
+
+            for (int index = 0; index < 8; index++)
+            {
+                ReplaceDetailedTarget(
+                    replacements.transform,
+                    detailedModel,
+                    $"Mampara_{index:00}",
+                    TeamBoothPath,
+                    Quaternion.identity);
+            }
+
+            for (int index = 0; index < 2; index++)
+            {
+                Transform box = FindNamed(detailedModel, $"Urna_{index:00}_Caja");
+                Transform details = FindNamed(detailedModel, $"Urna_{index:00}_Detalles");
+                List<Transform> targets = new List<Transform>();
+                if (box != null) targets.Add(box);
+                if (details != null) targets.Add(details);
+                ReplaceDetailedTargets(
+                    replacements.transform,
+                    targets,
+                    $"Team_Urna_{index + 1}",
+                    TeamBallotBoxPath,
+                    Quaternion.identity);
+            }
+        }
+
+        private static void ReplaceDetailedTarget(
+            Transform replacementParent,
+            Transform detailedModel,
+            string targetName,
+            string assetPath,
+            Quaternion visualRotation)
+        {
+            Transform target = FindNamed(detailedModel, targetName);
+            if (target == null) return;
+            ReplaceDetailedTargets(
+                replacementParent,
+                new List<Transform> { target },
+                "Team_" + targetName,
+                assetPath,
+                visualRotation);
+        }
+
+        private static void ReplaceDetailedTargets(
+            Transform replacementParent,
+            List<Transform> targets,
+            string replacementName,
+            string assetPath,
+            Quaternion visualRotation)
+        {
+            GameObject source = AssetDatabase.LoadAssetAtPath<GameObject>(assetPath);
+            if (source == null || targets.Count == 0) return;
+
+            Bounds targetBounds = RendererBounds(targets);
+            if (targetBounds.size.sqrMagnitude < 0.0001f) return;
+
+            GameObject wrapper = Child(replacementParent.gameObject, replacementName);
+            GameObject visual = Object.Instantiate(source, wrapper.transform);
+            visual.name = source.name;
+            visual.transform.localPosition = Vector3.zero;
+            visual.transform.localRotation = visualRotation;
+            visual.transform.localScale = Vector3.one;
+
+            Bounds sourceBounds = RendererBounds(new List<Transform> { visual.transform });
+            wrapper.transform.localScale = new Vector3(
+                SafeRatio(targetBounds.size.x, sourceBounds.size.x),
+                SafeRatio(targetBounds.size.y, sourceBounds.size.y),
+                SafeRatio(targetBounds.size.z, sourceBounds.size.z));
+
+            Bounds fittedBounds = RendererBounds(new List<Transform> { wrapper.transform });
+            wrapper.transform.position += targetBounds.center - fittedBounds.center;
+
+            foreach (Transform target in targets)
+            {
+                target.gameObject.SetActive(false);
+            }
+        }
+
+        private static Bounds RendererBounds(List<Transform> roots)
+        {
+            List<Renderer> renderers = new List<Renderer>();
+            foreach (Transform root in roots)
+            {
+                if (root != null) renderers.AddRange(root.GetComponentsInChildren<Renderer>(true));
+            }
+
+            if (renderers.Count == 0)
+            {
+                return new Bounds(roots.Count > 0 && roots[0] != null ? roots[0].position : Vector3.zero, Vector3.zero);
+            }
+
+            Bounds bounds = renderers[0].bounds;
+            for (int index = 1; index < renderers.Count; index++) bounds.Encapsulate(renderers[index].bounds);
+            return bounds;
+        }
+
+        private static float SafeRatio(float target, float source)
+        {
+            return source > 0.0001f ? target / source : 1f;
+        }
+
         private static void SetNamedActive(Transform parent, string exactName, bool active)
         {
             Transform target = FindNamed(parent, exactName);
@@ -298,20 +436,9 @@ namespace PollingStation.Editor
                 CreateFloorArrow(details.transform, "Flecha_Entrada_2", Vector3.Lerp(start, end, 0.70f), direction, accentMaterial);
             }
 
-            // Señalización ambiental. No depende de mesas, urnas, personas o mamparas.
-            CreateSign(details.transform, "Sign_Registro", "1  REGISTRO", new Vector3(-7.3f, 2.25f, -10.45f), new Vector3(2.35f, 0.48f, 0.06f), ineMaterial, Color.white, 0.22f);
-            CreateSign(details.transform, "Sign_Voto", "2  VOTO PRIVADO", new Vector3(0.4f, 2.25f, -10.45f), new Vector3(2.65f, 0.48f, 0.06f), ineMaterial, Color.white, 0.20f);
-            CreateSign(details.transform, "Sign_Urna", "3  DEPOSITE SU BOLETA", new Vector3(7.4f, 2.25f, -10.45f), new Vector3(3.05f, 0.48f, 0.06f), ineMaterial, Color.white, 0.17f);
-
-            GameObject information = DecorativePrimitive(
-                PrimitiveType.Cube,
-                "InformationBoard",
-                details.transform,
-                new Vector3(-13.55f, 1.2f, -6.8f),
-                new Vector3(1.8f, 1.4f, 0.08f),
-                whiteMaterial);
-            information.transform.rotation = Quaternion.Euler(0f, -18f, 0f);
-            AddFrontLabel(information.transform, "CASILLA ESPECIAL\nTENGA SU INE LISTA", Color.black, 0.15f);
+            // Los títulos grandes se omiten porque los textos 3D cambiaban de escala
+            // según la vista de Unity y llegaban a cubrir el escenario. Las etiquetas
+            // integradas al modelo y la interfaz en pantalla siguen indicando las zonas.
         }
 
         private static void CreateFloorArrow(Transform parent, string name, Vector3 position, Vector3 direction, Material material)
@@ -630,7 +757,16 @@ namespace PollingStation.Editor
             string path = $"{PrefabPath}/VoterPlaceholder.prefab";
             GameObject root = new GameObject("VoterPlaceholder");
             AgentView view = root.AddComponent<AgentView>();
-            Primitive(PrimitiveType.Capsule, "Body", root.transform, new Vector3(0f, 0.9f, 0f), new Vector3(0.58f, 0.9f, 0.58f), material);
+            GameObject woman = AddTeamModel(root.transform, TeamWomanPath, Quaternion.identity);
+            if (woman != null)
+            {
+                FitModelHeight(woman, 1.72f);
+                ConfigureTeamVoterAnimator(woman);
+            }
+            else
+            {
+                Primitive(PrimitiveType.Capsule, "Body", root.transform, new Vector3(0f, 0.9f, 0f), new Vector3(0.58f, 0.9f, 0.58f), material);
+            }
             GameObject saved = SavePrefab(root, path);
             return saved.GetComponent<AgentView>();
         }
@@ -645,10 +781,13 @@ namespace PollingStation.Editor
         private static GameObject CreateTablePrefab(Material wood, Material metal)
         {
             GameObject root = new GameObject("TablePlaceholder");
-            Primitive(PrimitiveType.Cube, "Top", root.transform, new Vector3(0f, 0.78f, 0f), new Vector3(1.8f, 0.12f, 0.75f), wood);
-            foreach (Vector3 offset in new[] { new Vector3(-0.72f, 0.38f, -0.27f), new Vector3(0.72f, 0.38f, -0.27f), new Vector3(-0.72f, 0.38f, 0.27f), new Vector3(0.72f, 0.38f, 0.27f) })
+            if (AddTeamModel(root.transform, TeamTablePath, Quaternion.identity) == null)
             {
-                Primitive(PrimitiveType.Cube, "Leg", root.transform, offset, new Vector3(0.09f, 0.76f, 0.09f), metal);
+                Primitive(PrimitiveType.Cube, "Top", root.transform, new Vector3(0f, 0.78f, 0f), new Vector3(1.8f, 0.12f, 0.75f), wood);
+                foreach (Vector3 offset in new[] { new Vector3(-0.72f, 0.38f, -0.27f), new Vector3(0.72f, 0.38f, -0.27f), new Vector3(-0.72f, 0.38f, 0.27f), new Vector3(0.72f, 0.38f, 0.27f) })
+                {
+                    Primitive(PrimitiveType.Cube, "Leg", root.transform, offset, new Vector3(0.09f, 0.76f, 0.09f), metal);
+                }
             }
             return SavePrefab(root, $"{PrefabPath}/TablePlaceholder.prefab");
         }
@@ -656,20 +795,109 @@ namespace PollingStation.Editor
         private static GameObject CreateBoothPrefab(Material white, Material accent)
         {
             GameObject root = new GameObject("BoothPlaceholder");
-            Primitive(PrimitiveType.Cube, "Back", root.transform, new Vector3(0f, 1f, 0.55f), new Vector3(1.8f, 2f, 0.1f), white);
-            Primitive(PrimitiveType.Cube, "Left", root.transform, new Vector3(-0.85f, 1f, 0f), new Vector3(0.1f, 2f, 1.2f), white);
-            Primitive(PrimitiveType.Cube, "Right", root.transform, new Vector3(0.85f, 1f, 0f), new Vector3(0.1f, 2f, 1.2f), white);
-            Primitive(PrimitiveType.Cube, "Shelf", root.transform, new Vector3(0f, 0.9f, 0.1f), new Vector3(1.6f, 0.08f, 0.75f), accent);
+            if (AddTeamModel(root.transform, TeamBoothPath, Quaternion.identity) == null)
+            {
+                Primitive(PrimitiveType.Cube, "Back", root.transform, new Vector3(0f, 1f, 0.55f), new Vector3(1.8f, 2f, 0.1f), white);
+                Primitive(PrimitiveType.Cube, "Left", root.transform, new Vector3(-0.85f, 1f, 0f), new Vector3(0.1f, 2f, 1.2f), white);
+                Primitive(PrimitiveType.Cube, "Right", root.transform, new Vector3(0.85f, 1f, 0f), new Vector3(0.1f, 2f, 1.2f), white);
+                Primitive(PrimitiveType.Cube, "Shelf", root.transform, new Vector3(0f, 0.9f, 0.1f), new Vector3(1.6f, 0.08f, 0.75f), accent);
+            }
             return SavePrefab(root, $"{PrefabPath}/BoothPlaceholder.prefab");
         }
 
         private static GameObject CreateBallotBoxPrefab(Material white, Material accent)
         {
             GameObject root = new GameObject("BallotBoxPlaceholder");
-            Primitive(PrimitiveType.Cube, "Box", root.transform, new Vector3(0f, 0.58f, 0f), new Vector3(0.85f, 1.05f, 0.85f), white);
-            Primitive(PrimitiveType.Cube, "Lid", root.transform, new Vector3(0f, 1.12f, 0f), new Vector3(0.95f, 0.08f, 0.95f), accent);
-            Primitive(PrimitiveType.Cube, "Slot", root.transform, new Vector3(0f, 1.17f, 0f), new Vector3(0.45f, 0.02f, 0.08f), ColorMaterial(Color.black));
+            if (AddTeamModel(root.transform, TeamBallotBoxPath, Quaternion.identity) == null)
+            {
+                Primitive(PrimitiveType.Cube, "Box", root.transform, new Vector3(0f, 0.58f, 0f), new Vector3(0.85f, 1.05f, 0.85f), white);
+                Primitive(PrimitiveType.Cube, "Lid", root.transform, new Vector3(0f, 1.12f, 0f), new Vector3(0.95f, 0.08f, 0.95f), accent);
+                Primitive(PrimitiveType.Cube, "Slot", root.transform, new Vector3(0f, 1.17f, 0f), new Vector3(0.45f, 0.02f, 0.08f), ColorMaterial(Color.black));
+            }
             return SavePrefab(root, $"{PrefabPath}/BallotBoxPlaceholder.prefab");
+        }
+
+        private static GameObject AddTeamModel(Transform parent, string assetPath, Quaternion rotation)
+        {
+            GameObject asset = AssetDatabase.LoadAssetAtPath<GameObject>(assetPath);
+            if (asset == null) return null;
+
+            GameObject instance = Object.Instantiate(asset, parent);
+            instance.name = asset.name;
+            instance.transform.localPosition = Vector3.zero;
+            instance.transform.localRotation = rotation;
+            instance.transform.localScale = Vector3.one;
+            return instance;
+        }
+
+        private static void FitModelHeight(GameObject model, float desiredHeight)
+        {
+            Bounds bounds = RendererBounds(new List<Transform> { model.transform });
+            if (bounds.size.y < 0.0001f) return;
+
+            float scale = desiredHeight / bounds.size.y;
+            model.transform.localScale = Vector3.one * scale;
+            Bounds fitted = RendererBounds(new List<Transform> { model.transform });
+            model.transform.position += new Vector3(-fitted.center.x, -fitted.min.y, -fitted.center.z);
+        }
+
+        private static void ConfigureTeamVoterAnimator(GameObject model)
+        {
+            AnimationClip[] clips = AssetDatabase.LoadAllAssetsAtPath(TeamWomanPath)
+                .OfType<AnimationClip>()
+                .Where(clip => !clip.name.StartsWith("__preview__"))
+                .ToArray();
+            AnimationClip idleClip = clips.FirstOrDefault(clip => clip.name.EndsWith("|Idle"));
+            AnimationClip walkClip = clips.FirstOrDefault(clip => clip.name.EndsWith("|Walk"));
+            if (idleClip == null || walkClip == null) return;
+
+            EnsureFolder("Assets/Animations");
+            EnsureFolder("Assets/Animations/PollingStation");
+            AnimatorController controller = AssetDatabase.LoadAssetAtPath<AnimatorController>(VoterControllerPath);
+            if (controller == null || controller.layers.Length == 0)
+            {
+                if (controller != null)
+                {
+                    AssetDatabase.DeleteAsset(VoterControllerPath);
+                }
+                controller = AnimatorController.CreateAnimatorControllerAtPath(VoterControllerPath);
+            }
+
+            if (!controller.parameters.Any(parameter => parameter.name == "Moving"))
+            {
+                controller.AddParameter("Moving", AnimatorControllerParameterType.Bool);
+            }
+
+            AnimatorStateMachine stateMachine = controller.layers[0].stateMachine;
+            AnimatorState idleState = stateMachine.states.Select(item => item.state).FirstOrDefault(state => state.name == "Idle") ?? stateMachine.AddState("Idle");
+            AnimatorState walkState = stateMachine.states.Select(item => item.state).FirstOrDefault(state => state.name == "Walk") ?? stateMachine.AddState("Walk");
+            idleState.motion = idleClip;
+            walkState.motion = walkClip;
+            stateMachine.defaultState = idleState;
+
+            if (!idleState.transitions.Any(transition => transition.destinationState == walkState))
+            {
+                AnimatorStateTransition transition = idleState.AddTransition(walkState);
+                transition.hasExitTime = false;
+                transition.duration = 0.15f;
+                transition.AddCondition(AnimatorConditionMode.If, 0f, "Moving");
+            }
+            if (!walkState.transitions.Any(transition => transition.destinationState == idleState))
+            {
+                AnimatorStateTransition transition = walkState.AddTransition(idleState);
+                transition.hasExitTime = false;
+                transition.duration = 0.15f;
+                transition.AddCondition(AnimatorConditionMode.IfNot, 0f, "Moving");
+            }
+
+            Animator animator = model.GetComponent<Animator>();
+            if (animator == null)
+            {
+                animator = model.AddComponent<Animator>();
+            }
+            animator.runtimeAnimatorController = controller;
+            animator.applyRootMotion = false;
+            EditorUtility.SetDirty(controller);
         }
 
         private static GameObject SavePrefab(GameObject source, string path)
