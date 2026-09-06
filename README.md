@@ -75,6 +75,7 @@ Entrada → Secretario → Mesa → Mampara → Urna → Salida
 - Cámara, señalización, flechas y marcas de espera.
 - Mesas, sillas, mamparas y urnas del equipo importadas y disponibles para ajuste posterior.
 - Modelo femenino del equipo con animaciones de reposo y caminata.
+- Orientación del modelo corregida para que camine mirando hacia su destino.
 - Mobiliario original del escenario conservado para evitar deformaciones visuales.
 
 ## Recorrido del votante

@@ -757,7 +757,9 @@ namespace PollingStation.Editor
             string path = $"{PrefabPath}/VoterPlaceholder.prefab";
             GameObject root = new GameObject("VoterPlaceholder");
             AgentView view = root.AddComponent<AgentView>();
-            GameObject woman = AddTeamModel(root.transform, TeamWomanPath, Quaternion.identity);
+            // El FBX fue exportado mirando hacia -Z, mientras que Unity considera +Z
+            // como el frente usado por Quaternion.LookRotation.
+            GameObject woman = AddTeamModel(root.transform, TeamWomanPath, Quaternion.Euler(0f, 180f, 0f));
             if (woman != null)
             {
                 FitModelHeight(woman, 1.72f);
